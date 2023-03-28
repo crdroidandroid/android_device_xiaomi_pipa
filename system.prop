@@ -1,2 +1,5 @@
+# Baseband
+gsm.version.baseband?=Wi-Fi Only
+
 # Xiaomi
 ro.product.mod_device=pipa_global
