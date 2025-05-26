@@ -30,6 +30,10 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     libpiex_shim
 
+# Debloat
+PRODUCT_PACKAGES += \
+    RemovePackages
+
 # Display
 PRODUCT_VENDOR_PROPERTIES += \
     debug.graphics.game_default_frame_rate.disabled=1 \

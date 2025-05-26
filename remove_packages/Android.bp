@@ -1,0 +1,16 @@
+android_app_import {
+     name: "RemovePackages",
+     apk: "DebloatDummy.apk",
+     presigned: true,
+     preprocessed: true,
+ 
+     overrides: [
+         "GoogleContacts",
+         "GoogleDialer",
+         "Messages",
+     ],
+ 	dex_preopt: {
+ 		enabled: false,
+ 	},
+ 	privileged: true,
+ }
