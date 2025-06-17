@@ -22,3 +22,5 @@ allow xiaomi_keyboard servicemanager:binder { call transfer };
 # Additional diagnostic permissions
 allow xiaomi_keyboard sysfs:dir { read open };
 allow xiaomi_keyboard sysfs_devices_system_cpu:file { read open };
+
+allow xiaomi_keyboard xiaomi_keyboard_conf_file:file { read open };
