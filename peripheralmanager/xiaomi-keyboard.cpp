@@ -76,7 +76,7 @@ pthread_cond_t kb_cond = PTHREAD_COND_INITIALIZER;
 bool kb_thread_paused = false;
 
 // Add these global variables
-time_t last_monitor_activity = 0;
+time_t last_monitor_activity = time(NULL);
 pthread_t watchdog_thread;
 bool watchdog_enabled = true;
 
@@ -217,14 +217,25 @@ bool device_is_locked = false;
 
 void *keyboard_monitor_thread(void *arg) {
     (void)arg;
-    
+
     int connection_state_count = 0;
     bool last_state = access(EVENT_PATH, F_OK) != -1;
-    
+
+    struct timespec timeout;
+
     while (!terminate) {
+        // Check whether the watchdog thread should be paused
+        pthread_mutex_lock(&kb_mutex);
+        while (kb_thread_paused && !terminate) {
+            pthread_cond_wait(&kb_cond, &kb_mutex);
+        }
+        pthread_mutex_unlock(&kb_mutex);
+
+        if (terminate) break;
+
+        // Check keyboard connection state
         bool current_state = (access(EVENT_PATH, F_OK) != -1);
-        
-        // Debounce connection state changes
+
         if (current_state != last_state) {
             connection_state_count++;
             LOGD("Potential keyboard connection change detected (%d/%d)", 
@@ -232,23 +243,17 @@ void *keyboard_monitor_thread(void *arg) {
         } else {
             connection_state_count = 0;
         }
-        
-        // Only process state change after debounce count
+
         if (connection_state_count >= DEBOUNCE_COUNT) {
             last_state = current_state;
             connection_state_count = 0;
-            
+
             pthread_mutex_lock(&kb_mutex);
-            last_monitor_activity = time(NULL);
-            
             if (!kb_thread_paused) {
-                // New logic: Enable only if connected AND not locked
                 if (current_state && !device_is_locked && !kb_status) {
                     LOGI("Keyboard connected and device unlocked - enabling");
                     set_kb_state(true, false);
-                } 
-                // Always disable if disconnected or if device becomes locked
-                else if ((!current_state || device_is_locked) && kb_status) {
+                } else if ((!current_state || device_is_locked) && kb_status) {
                     LOGI("Keyboard %s - disabling", 
                          !current_state ? "disconnected" : "disabled due to device lock");
                     set_kb_state(false, false);
@@ -256,13 +261,18 @@ void *keyboard_monitor_thread(void *arg) {
             }
             pthread_mutex_unlock(&kb_mutex);
         }
-        
-        // More efficient sleep pattern
+
+        // Always update watchdog activity if not paused
+        pthread_mutex_lock(&kb_mutex);
+        if (!kb_thread_paused)
+            last_monitor_activity = time(NULL);
+        pthread_mutex_unlock(&kb_mutex);
+
+        // Sleep in a responsive pattern (1s total)
         for (int i = 0; i < 5 && !terminate; i++) {
-            usleep(200000); // 5 * 200ms = 1 second total, but more responsive
+            usleep(200000);
         }
     }
-    
     LOGI("Keyboard monitor thread exiting");
     return NULL;
 }
@@ -280,11 +290,12 @@ void *watchdog_thread_func(void *arg) {
         
         time_t now = time(NULL);
         pthread_mutex_lock(&kb_mutex);
+        bool is_paused = kb_thread_paused;
         time_t last_activity = last_monitor_activity;
         pthread_mutex_unlock(&kb_mutex);
         
         // If monitor thread hasn't updated in WATCHDOG_INTERVAL, it might be stuck
-        if (now - last_activity > WATCHDOG_INTERVAL && watchdog_enabled) {
+        if ((is_paused || !watchdog_enabled) && now - last_activity > WATCHDOG_INTERVAL && watchdog_enabled) {
             LOGW("Watchdog: Monitor thread appears stuck for %d seconds", 
                  (int)(now - last_activity));
             
