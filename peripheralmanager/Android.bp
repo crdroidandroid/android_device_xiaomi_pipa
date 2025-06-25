@@ -46,4 +46,10 @@ cc_binary {
         "liblog",
         "libsensorndkbridge",
     ],
+
+    arch: {
+        arm: {
+            cflags: ["-mfpu=neon", "-mfloat-abi=softfp"],
+        },
+    },
 }
