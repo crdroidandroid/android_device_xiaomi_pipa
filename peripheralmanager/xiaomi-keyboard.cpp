@@ -7,8 +7,8 @@
 #include <android/log.h>
 #include <android/looper.h>
 #include <android/sensor.h>
-#include <arm_neon.h> // for fast square root 
-#include <ctype.h>  // Add for isspace() function
+#include <arm_neon.h>  // for fast square root
+#include <ctype.h>     // Add for isspace() function
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -117,7 +117,7 @@ void* accelerometer_thread(void* args) {
   }
   pthread_mutex_unlock(&shared_mutex);
 
-  sensorManager = ASensorManager_getInstance();
+  sensorManager = ASensorManager_getInstanceForPackage("org.lineageos.xiaomiperipheralmanager");
   accelerometer = ASensorManager_getDefaultSensor(sensorManager,
                                                   ASENSOR_TYPE_ACCELEROMETER);
 
@@ -162,10 +162,26 @@ void* accelerometer_thread(void* args) {
   return NULL;
 }
 
-float neon_sqrtf(float x) {
-    float32x2_t val = vdup_n_f32(x);
-    float32x2_t res = vsqrt_f32(val);
-    return vget_lane_f32(res, 0);
+static inline float neon_sqrtf(float x) {
+  float32x2_t val = vdup_n_f32(x);
+  float32x2_t res = vsqrt_f32(val);
+  return vget_lane_f32(res, 0);
+}
+
+static inline float fast_acosf(float x) {
+  if (x < -1.0f) x = -1.0f;
+  if (x > 1.0f) x = 1.0f;
+
+  float negate = (x < 0.0f);
+  x = fabsf(x);
+
+  float ret = -0.0187293f;
+  ret = ret * x + 0.0742610f;
+  ret = ret * x - 0.2121144f;
+  ret = ret * x + 1.5707288f;
+  ret = ret * neon_sqrtf(1.0f - x);
+
+  return negate ? (M_PI - ret) : ret;
 }
 
 // Simplify configuration loading
@@ -509,54 +525,87 @@ void handle_lock_event(char* buffer) {
 
 float calculateAngle(float kX, float kY, float kZ, float padX, float padY,
                      float padZ) {
-  float dot = kX * padX + kY * padY + kZ * padZ;
-  float norm_kb = neon_sqrtf(kX * kX + kY * kY + kZ * kZ);
-  float norm_pad = neon_sqrtf(padX * padX + padY * padY + padZ * padZ);
+  float32x4_t a = {kX, kY, kZ, 0.0f};
+  float32x4_t b = {padX, padY, padZ, 0.0f};
 
-  // Clamp to prevent NaN due to floating point precision issues
-  float cos_theta = dot / (norm_kb * norm_pad);
-  if (cos_theta > 1.0f) cos_theta = 1.0f;
-  if (cos_theta < -1.0f) cos_theta = -1.0f;
+  // Dot product
+  float32x4_t prod = vmulq_f32(a, b);
+  float dot = vgetq_lane_f32(prod, 0) + vgetq_lane_f32(prod, 1) +
+              vgetq_lane_f32(prod, 2);
 
-  return acosf(cos_theta) * (180.0f / M_PI);  // angle in degrees
+  // Norm of a
+  float32x4_t a2 = vmulq_f32(a, a);
+  float norm_a_sq =
+      vgetq_lane_f32(a2, 0) + vgetq_lane_f32(a2, 1) + vgetq_lane_f32(a2, 2);
+  float norm_a = neon_sqrtf(norm_a_sq);
+
+  // Norm of b
+  float32x4_t b2 = vmulq_f32(b, b);
+  float norm_b_sq =
+      vgetq_lane_f32(b2, 0) + vgetq_lane_f32(b2, 1) + vgetq_lane_f32(b2, 2);
+  float norm_b = neon_sqrtf(norm_b_sq);
+
+  if (norm_a == 0.0f || norm_b == 0.0f) return 0.0f;
+
+  float cos_theta = dot / (norm_a * norm_b);
+  float angle = fast_acosf(cos_theta) * (180.0f / M_PI);
+
+  return angle;
+}
+
+void get_kb_accel(char* buffer) {
+  int x = ((buffer[7] << 4) & 4080) | ((buffer[6] >> 4) & 15);
+  int y = ((buffer[9] << 4) & 4080) | ((buffer[8] >> 4) & 15);
+  int z = ((buffer[11] << 4) & 4080) | ((buffer[10] >> 4) & 15);
+
+  if ((x & 2048) == 2048) x = -(4096 - x);
+  if ((y & 2048) == 2048) y = -(4096 - y);
+  if ((z & 2048) == 2048) z = -(4096 - z);
+
+  float x_normal = (x * 9.8f) / 256.0f;
+  float y_normal = ((-y) * 9.8f) / 256.0f;
+  float z_normal = ((-z) * 9.8f) / 256.0f;
+
+  float scale = 9.8f / neon_sqrtf(x_normal * x_normal + y_normal * y_normal +
+                                  z_normal * z_normal);
+
+  pthread_mutex_lock(&shared_mutex);
+  kbX = x_normal * scale;
+  kbY = y_normal * scale;
+  kbZ = z_normal * scale;
+  pthread_mutex_unlock(&shared_mutex);
 }
 
 void* angle_thread_function(void* arg) {
   char* buffer = (char*)arg;
+
+  float last_kbX = 0.0f, last_kbY = 0.0f, last_kbZ = 0.0f;
+  const float vector_threshold = 0.04f;
+
   while (1) {
-    pthread_mutex_lock(&shared_mutex);
-    while (kb_thread_paused && !terminate && (unsigned char)buffer[4] != 100) {
-      pthread_cond_wait(&shared_cond, &shared_mutex);
+    if (terminate) {
+      pthread_mutex_unlock(&shared_mutex);
+      break;  // exit the thread cleanly
     }
+
     pthread_mutex_unlock(&shared_mutex);
 
-    int x = ((buffer[7] << 4) & 4080) | ((buffer[6] >> 4) & 15);
-    int y = ((buffer[9] << 4) & 4080) | ((buffer[8] >> 4) & 15);
-    int z = ((buffer[11] << 4) & 4080) | ((buffer[10] >> 4) & 15);
+    get_kb_accel(buffer);
+    float dx = kbX - last_kbX;
+    float dy = kbY - last_kbY;
+    float dz = kbZ - last_kbZ;
 
-    if ((x & 2048) == 2048) x = -(4096 - x);
-    if ((y & 2048) == 2048) y = -(4096 - y);
-    if ((z & 2048) == 2048) z = -(4096 - z);
+    float delta = dx*dx + dy*dy + dz*dz;
 
-    float x_normal = (x * 9.8f) / 256.0f;
-    float y_normal = ((-y) * 9.8f) / 256.0f;
-    float z_normal = ((-z) * 9.8f) / 256.0f;
+    if (delta > vector_threshold) {
+      float angle = calculateAngle(kbX, kbY, kbZ, padX, padY, padZ);
+      set_kb_state(!(angle >= 120), false);
 
-    float scale = 9.8f / neon_sqrtf(x_normal * x_normal + y_normal * y_normal +
-                               z_normal * z_normal);
-
-    pthread_mutex_lock(&shared_mutex);
-    kbX = x_normal * scale;
-    kbY = y_normal * scale;
-    kbZ = z_normal * scale;
-    pthread_mutex_unlock(&shared_mutex);
-
-    float angle = calculateAngle(kbX, kbY, kbZ, padX, padY, padZ);
-    // LOGI("Angle: %.2f", angle);
-
-    set_kb_state(!(angle >= 120), false);
-
-    usleep(100000);  // 100ms delay between reads
+      last_kbX = kbX;
+      last_kbY = kbY;
+      last_kbZ = kbZ;
+    }
+    usleep(500000);
   }
 
   return NULL;
