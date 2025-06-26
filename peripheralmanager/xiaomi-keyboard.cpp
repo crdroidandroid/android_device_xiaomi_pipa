@@ -7,7 +7,7 @@
 #include <android/log.h>
 #include <android/looper.h>
 #include <android/sensor.h>
-#include <arm_neon.h>  // for fast square root
+#include <arm_neon.h>  // for fast square root + vector math
 #include <ctype.h>     // Add for isspace() function
 #include <dirent.h>
 #include <errno.h>
@@ -117,7 +117,8 @@ void* accelerometer_thread(void* args) {
   }
   pthread_mutex_unlock(&shared_mutex);
 
-  sensorManager = ASensorManager_getInstanceForPackage("org.lineageos.xiaomiperipheralmanager");
+  sensorManager = ASensorManager_getInstanceForPackage(
+      "org.lineageos.xiaomiperipheralmanager");
   accelerometer = ASensorManager_getDefaultSensor(sensorManager,
                                                   ASENSOR_TYPE_ACCELEROMETER);
 
@@ -395,8 +396,8 @@ void* watchdog_thread_func(void* arg) {
     pthread_mutex_unlock(&shared_mutex);
 
     // If monitor thread hasn't updated in WATCHDOG_INTERVAL, it might be stuck
-    if ((is_paused || !watchdog_enabled) &&
-        now - last_activity > WATCHDOG_INTERVAL && watchdog_enabled) {
+    if (!is_paused && watchdog_enabled &&
+        now - last_activity > WATCHDOG_INTERVAL) {
       LOGW("Watchdog: Monitor thread appears stuck for %d seconds",
            (int)(now - last_activity));
 
@@ -595,7 +596,7 @@ void* angle_thread_function(void* arg) {
     float dy = kbY - last_kbY;
     float dz = kbZ - last_kbZ;
 
-    float delta = dx*dx + dy*dy + dz*dz;
+    float delta = dx * dx + dy * dy + dz * dz;
 
     if (delta > vector_threshold) {
       float angle = calculateAngle(kbX, kbY, kbZ, padX, padY, padZ);
