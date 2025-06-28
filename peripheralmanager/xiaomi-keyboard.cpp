@@ -39,6 +39,7 @@ const char kPackageName[] = "xiaomi-keyboard";
 #define MSG_TYPE_WAKE 40
 #define MSG_HEADER_1 0x31
 #define MSG_HEADER_2 0x38
+#define MSG_TYPE_MOVEMENT 0x64
 
 // Lock state message types
 #define MSG_TYPE_LOCK 41
@@ -86,10 +87,13 @@ float kbZ = 0;
 // Add signal handler for graceful termination - MOVED HERE
 volatile sig_atomic_t terminate = 0;
 
-// Condition variable for pausing and resuming the kb, sensor, angle threads
-pthread_mutex_t shared_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t shared_cond = PTHREAD_COND_INITIALIZER;
+// Condition variable for pausing and resuming the kb, sensor threads
+pthread_mutex_t kb_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t kb_cond = PTHREAD_COND_INITIALIZER;
 bool kb_thread_paused = false;
+
+// Condition variable for the sensor thread
+pthread_mutex_t sensor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Add these global variables
 time_t last_monitor_activity = time(NULL);
@@ -100,9 +104,7 @@ bool watchdog_enabled = true;
 const bool DEFAULT_WATCHDOG_ENABLED = true;
 
 // Constants
-#define SENSOR_DELAY_MICROS 20000  // 50 Hz
-#define POLL_INTERVAL_MS 100       // How often to poll
-#define LOG_INTERVAL_SECONDS 5     // How often to log
+#define POLL_INTERVAL_MS 500  // How often to poll
 
 // Globals
 static ASensorManager* sensorManager = NULL;
@@ -111,11 +113,11 @@ static ASensorEventQueue* sensorQueue = NULL;
 static ALooper* looper = NULL;
 
 void* accelerometer_thread(void* args) {
-  pthread_mutex_lock(&shared_mutex);
+  pthread_mutex_lock(&kb_mutex);
   while (kb_thread_paused && !terminate) {
-    pthread_cond_wait(&shared_cond, &shared_mutex);
+    pthread_cond_wait(&kb_cond, &kb_mutex);
   }
-  pthread_mutex_unlock(&shared_mutex);
+  pthread_mutex_unlock(&kb_mutex);
 
   sensorManager = ASensorManager_getInstanceForPackage(
       "org.lineageos.xiaomiperipheralmanager");
@@ -130,31 +132,24 @@ void* accelerometer_thread(void* args) {
   looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
   sensorQueue =
       ASensorManager_createEventQueue(sensorManager, looper, 0, NULL, NULL);
-
   ASensorEventQueue_enableSensor(sensorQueue, accelerometer);
   ASensorEventQueue_setEventRate(sensorQueue, accelerometer,
-                                 SENSOR_DELAY_MICROS);
+                                 ASensor_getMinDelay(accelerometer));
 
-  time_t lastLog = 0;
-
-  while (1) {
-    ALooper_pollOnce(POLL_INTERVAL_MS, NULL, NULL, NULL);  // poll every 100ms
+  while (!terminate) {
+    ALooper_pollOnce(POLL_INTERVAL_MS, NULL, NULL, NULL);
+    if (terminate) break;
 
     ASensorEvent event;
     while (ASensorEventQueue_getEvents(sensorQueue, &event, 1) > 0) {
       if (event.type == ASENSOR_TYPE_ACCELEROMETER) {
+        pthread_mutex_lock(&sensor_mutex);
         padX = event.acceleration.x;
         padY = event.acceleration.y;
         padZ = event.acceleration.z;
+        pthread_mutex_unlock(&sensor_mutex);
       }
     }
-
-    /* time_t now = time(NULL);
-    if (now - lastLog >= LOG_INTERVAL_SECONDS) {
-        lastLog = now;
-        LOGI("Accel (X,Y,Z): %.2f, %.2f, %.2f", padX, padY, padZ);
-
-    }*/
   }
 
   // Unreachable, but good practice
@@ -327,11 +322,11 @@ void* keyboard_monitor_thread(void* arg) {
 
   while (!terminate) {
     // Check whether the watchdog thread should be paused
-    pthread_mutex_lock(&shared_mutex);
+    pthread_mutex_lock(&kb_mutex);
     while (kb_thread_paused && !terminate) {
-      pthread_cond_wait(&shared_cond, &shared_mutex);
+      pthread_cond_wait(&kb_cond, &kb_mutex);
     }
-    pthread_mutex_unlock(&shared_mutex);
+    pthread_mutex_unlock(&kb_mutex);
 
     if (terminate) break;
 
@@ -350,7 +345,7 @@ void* keyboard_monitor_thread(void* arg) {
       last_state = current_state;
       connection_state_count = 0;
 
-      pthread_mutex_lock(&shared_mutex);
+      pthread_mutex_lock(&kb_mutex);
       if (!kb_thread_paused) {
         if (current_state && !device_is_locked && !kb_status) {
           LOGI("Keyboard connected and device unlocked - enabling");
@@ -361,13 +356,13 @@ void* keyboard_monitor_thread(void* arg) {
           set_kb_state(false, false);
         }
       }
-      pthread_mutex_unlock(&shared_mutex);
+      pthread_mutex_unlock(&kb_mutex);
     }
 
     // Always update watchdog activity if not paused
-    pthread_mutex_lock(&shared_mutex);
+    pthread_mutex_lock(&kb_mutex);
     if (!kb_thread_paused) last_monitor_activity = time(NULL);
-    pthread_mutex_unlock(&shared_mutex);
+    pthread_mutex_unlock(&kb_mutex);
 
     // Sleep in a responsive pattern (1s total)
     for (int i = 0; i < 5 && !terminate; i++) {
@@ -390,10 +385,10 @@ void* watchdog_thread_func(void* arg) {
     sleep(10);  // Check every 10 seconds
 
     time_t now = time(NULL);
-    pthread_mutex_lock(&shared_mutex);
+    pthread_mutex_lock(&kb_mutex);
     bool is_paused = kb_thread_paused;
     time_t last_activity = last_monitor_activity;
-    pthread_mutex_unlock(&shared_mutex);
+    pthread_mutex_unlock(&kb_mutex);
 
     // If monitor thread hasn't updated in WATCHDOG_INTERVAL, it might be stuck
     if (!is_paused && watchdog_enabled &&
@@ -402,9 +397,9 @@ void* watchdog_thread_func(void* arg) {
            (int)(now - last_activity));
 
       // Signal the condition to try to wake up the thread
-      pthread_mutex_lock(&shared_mutex);
-      pthread_cond_signal(&shared_cond);
-      pthread_mutex_unlock(&shared_mutex);
+      pthread_mutex_lock(&kb_mutex);
+      pthread_cond_signal(&kb_cond);
+      pthread_mutex_unlock(&kb_mutex);
     }
   }
 
@@ -421,15 +416,15 @@ void* watchdog_thread_func(void* arg) {
 void handle_power_event(char* buffer) {
   bool is_wake = (buffer[6] == 1);
 
-  pthread_mutex_lock(&shared_mutex);
+  pthread_mutex_lock(&kb_mutex);
   if (is_wake) {
     kb_thread_paused = false;
     last_monitor_activity = time(NULL);
-    pthread_cond_signal(&shared_cond);
+    pthread_cond_signal(&kb_cond);
   } else {
     kb_thread_paused = true;
   }
-  pthread_mutex_unlock(&shared_mutex);
+  pthread_mutex_unlock(&kb_mutex);
 
   // Log and handle status after mutex is released
   if (is_wake) {
@@ -465,7 +460,7 @@ void handle_lock_event(char* buffer) {
   }
   LOGD("Lock message buffer: %s", hex_buffer);
 
-  pthread_mutex_lock(&shared_mutex);
+  pthread_mutex_lock(&kb_mutex);
   // Update global lock state
   device_is_locked = is_locked;
 
@@ -521,7 +516,7 @@ void handle_lock_event(char* buffer) {
       LOGW("Not enabling keyboard on unlock - device not present");
     }
   }
-  pthread_mutex_unlock(&shared_mutex);
+  pthread_mutex_unlock(&kb_mutex);
 }
 
 float calculateAngle(float kX, float kY, float kZ, float padX, float padY,
@@ -570,46 +565,45 @@ void get_kb_accel(char* buffer) {
   float scale = 9.8f / neon_sqrtf(x_normal * x_normal + y_normal * y_normal +
                                   z_normal * z_normal);
 
-  pthread_mutex_lock(&shared_mutex);
+  pthread_mutex_lock(&sensor_mutex);
   kbX = x_normal * scale;
   kbY = y_normal * scale;
   kbZ = z_normal * scale;
-  pthread_mutex_unlock(&shared_mutex);
+  pthread_mutex_unlock(&sensor_mutex);
 }
 
-void* angle_thread_function(void* arg) {
-  char* buffer = (char*)arg;
-
+void handle_accel_event(char* buffer) {
+  float local_padX, local_padY, local_padZ;
+  float local_kbX, local_kbY, local_kbZ;
   float last_kbX = 0.0f, last_kbY = 0.0f, last_kbZ = 0.0f;
   const float vector_threshold = 0.04f;
 
-  while (1) {
-    if (terminate) {
-      pthread_mutex_unlock(&shared_mutex);
-      break;  // exit the thread cleanly
-    }
+  get_kb_accel(buffer);
 
-    pthread_mutex_unlock(&shared_mutex);
+  pthread_mutex_lock(&sensor_mutex);
+  local_padX = padX;
+  local_padY = padY;
+  local_padZ = padZ;
+  local_kbX = kbX;
+  local_kbY = kbY;
+  local_kbZ = kbZ;
+  pthread_mutex_unlock(&sensor_mutex);
 
-    get_kb_accel(buffer);
-    float dx = kbX - last_kbX;
-    float dy = kbY - last_kbY;
-    float dz = kbZ - last_kbZ;
+  float dx = local_kbX - last_kbX;
+  float dy = local_kbY - last_kbY;
+  float dz = local_kbZ - last_kbZ;
 
-    float delta = dx * dx + dy * dy + dz * dz;
+  float delta = dx * dx + dy * dy + dz * dz;
 
-    if (delta > vector_threshold) {
-      float angle = calculateAngle(kbX, kbY, kbZ, padX, padY, padZ);
-      set_kb_state(!(angle >= 120), false);
+  if (delta > vector_threshold) {
+    float angle = calculateAngle(local_kbX, local_kbY, local_kbZ, local_padX,
+                                 local_padY, local_padZ);
+    set_kb_state(!(angle >= 120), false);
 
-      last_kbX = kbX;
-      last_kbY = kbY;
-      last_kbZ = kbZ;
-    }
-    usleep(500000);
+    last_kbX = local_kbX;
+    last_kbY = local_kbY;
+    last_kbZ = local_kbZ;
   }
-
-  return NULL;
 }
 
 /**
@@ -629,6 +623,8 @@ void handle_event(char* buffer, ssize_t bytes_read) {
     }
   } else if (buffer[4] == MSG_TYPE_LOCK || buffer[4] == MSG_TYPE_UNLOCK) {
     handle_lock_event(buffer);
+  } else if (buffer[4] == MSG_TYPE_MOVEMENT) {
+    handle_accel_event(buffer);
   }
 }
 
@@ -695,10 +691,10 @@ void signal_handler(int signum) {
 void cleanup_resources(pthread_t monitor_thread, pthread_t watchdog_thread_id /*, pthread_t tab_sensor_thread, pthread_t kb_sensor_thread*/) {
   LOGI("Performing cleanup...");
 
-  pthread_mutex_lock(&shared_mutex);
+  pthread_mutex_lock(&kb_mutex);
   terminate = 1;
-  pthread_cond_signal(&shared_cond);
-  pthread_mutex_unlock(&shared_mutex);
+  pthread_cond_signal(&kb_cond);
+  pthread_mutex_unlock(&kb_mutex);
 
   pthread_join(monitor_thread, NULL);
   if (watchdog_enabled && watchdog_thread_id != 0) {
@@ -709,9 +705,11 @@ void cleanup_resources(pthread_t monitor_thread, pthread_t watchdog_thread_id /*
     close(fd);
     fd = -1;
   }
+  ASensorEventQueue_disableSensor(sensorQueue, accelerometer);
+  ASensorManager_destroyEventQueue(sensorManager, sensorQueue);
 }
 
-#define VERSION_STRING "1.0.0"
+#define VERSION_STRING "1.1.0"
 
 /**
  * Main function
@@ -808,11 +806,6 @@ int main() {
   pthread_create(&sensor_thread, NULL, accelerometer_thread, NULL);
   pthread_detach(sensor_thread);
 
-  // Create kb sensor thread
-  pthread_t kb_sensor_thread;
-  pthread_create(&kb_sensor_thread, NULL, angle_thread_function, buffer);
-  pthread_detach(kb_sensor_thread);
-
   // Set up signal handling
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
@@ -834,7 +827,7 @@ int main() {
       handle_event(buffer, bytes_read);
     } else if (bytes_read == 0) {
       // No data available, sleep before trying again
-      usleep(100000);  // 100ms
+      usleep(500000);  // 500ms
     } else {
       // Read error occurred
       LOGE("Error reading device: %s", strerror(errno));
