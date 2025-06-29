@@ -21,7 +21,6 @@
 #include <sys/types.h>
 #include <time.h>  // Add for time functions
 #include <unistd.h>
-
 const char kPackageName[] = "xiaomi-keyboard";
 
 /********************************************
@@ -29,7 +28,6 @@ const char kPackageName[] = "xiaomi-keyboard";
  ********************************************/
 #define BUFFER_SIZE 256
 #define NANODEV_PATH "/dev/nanodev0"
-#define CONFIG_PATH "/data/local/tmp/xiaomi_keyboard.conf"
 #define DEBOUNCE_COUNT 3
 
 /********************************************
@@ -178,42 +176,6 @@ static inline float fast_acosf(float x) {
   ret = ret * neon_sqrtf(1.0f - x);
 
   return negate ? (M_PI - ret) : ret;
-}
-
-// Simplify configuration loading
-void load_configuration() {
-  // Set defaults
-  watchdog_enabled = DEFAULT_WATCHDOG_ENABLED;
-
-  FILE* config_file = fopen(CONFIG_PATH, "r");
-  if (!config_file) {
-    LOGI("No configuration file found, using defaults");
-    return;
-  }
-
-  char line[256];
-  char key[128], value[128];
-
-  while (fgets(line, sizeof(line), config_file) != NULL) {
-    // Skip comments and empty lines
-    if (line[0] == '#' || line[0] == '\n') continue;
-
-    if (sscanf(line, "%127[^=]=%127s", key, value) == 2) {
-      // Remove whitespace
-      char* p = key + strlen(key) - 1;
-      while (p >= key && isspace(*p)) *p-- = '\0';
-
-      // Process configuration keys
-      if (strcmp(key, "watchdog_enabled") == 0) {
-        watchdog_enabled = (strcmp(value, "true") == 0);
-        LOGI("Config: watchdog_enabled = %d", watchdog_enabled);
-      }
-      // Add more configuration options as needed
-    }
-  }
-
-  fclose(config_file);
-  LOGI("Configuration loaded from %s", CONFIG_PATH);
 }
 
 /**
@@ -722,9 +684,6 @@ int main() {
   strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
 
   LOGI("Xiaomi keyboard service v%s starting at %s", VERSION_STRING, time_str);
-
-  // Load configuration
-  load_configuration();
 
   ssize_t bytes_read;
   char buffer[BUFFER_SIZE];
