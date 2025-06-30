@@ -93,16 +93,42 @@ bool kb_thread_paused = false;
 // Condition variable for the sensor thread
 pthread_mutex_t sensor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// For the preference thread
+pthread_mutex_t angle_detection_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 // Add these global variables
 time_t last_monitor_activity = time(NULL);
 pthread_t watchdog_thread;
 bool watchdog_enabled = true;
 
-// Add a default config that can be used instead of parsing a file
-const bool DEFAULT_WATCHDOG_ENABLED = true;
+// Angle detection enable flag
+bool angle_detection_enabled = false;  // Default value
 
-// Constants
-#define POLL_INTERVAL_MS 500  // How often to poll
+void load_angle_detection_preference() {
+  FILE* f = fopen("/data/misc/xiaomi_keyboard.conf", "r");
+  if (f) {
+    int c = fgetc(f);
+    pthread_mutex_lock(&angle_detection_mutex);
+    angle_detection_enabled = (c == '1');
+    pthread_mutex_lock(&angle_detection_mutex);
+    fclose(f);
+    LOGI("Angle detection preference loaded: %s",
+         angle_detection_enabled ? "enabled" : "disabled");
+  } else {
+    LOGW(
+        "Could not open /data/misc/xiaomi_keyboard.conf, using default "
+        "(enabled)");
+    // angle_detection_enabled = true;
+  }
+}
+
+void* preference_watcher_thread(void*) {
+  while (!terminate) {
+    load_angle_detection_preference();
+    sleep(10);  // Reload every 10 seconds
+  }
+  return NULL;
+}
 
 // Globals
 static ASensorManager* sensorManager = NULL;
@@ -135,7 +161,7 @@ void* accelerometer_thread(void* args) {
                                  ASensor_getMinDelay(accelerometer));
 
   while (!terminate) {
-    ALooper_pollOnce(POLL_INTERVAL_MS, NULL, NULL, NULL);
+    ALooper_pollOnce(500, NULL, NULL, NULL);
     if (terminate) break;
 
     ASensorEvent event;
@@ -572,6 +598,10 @@ void handle_accel_event(char* buffer) {
  * Main event handler - dispatches to appropriate handler based on message type
  */
 void handle_event(char* buffer, ssize_t bytes_read) {
+  pthread_mutex_lock(&angle_detection_mutex);
+  bool angle_detection_enabled_local = angle_detection_enabled;
+  pthread_mutex_unlock(&angle_detection_mutex);
+
   // Basic validation
   if (bytes_read < 7 || buffer[1] != MSG_HEADER_1 ||
       buffer[2] != MSG_HEADER_2) {
@@ -585,7 +615,8 @@ void handle_event(char* buffer, ssize_t bytes_read) {
     }
   } else if (buffer[4] == MSG_TYPE_LOCK || buffer[4] == MSG_TYPE_UNLOCK) {
     handle_lock_event(buffer);
-  } else if (buffer[4] == MSG_TYPE_MOVEMENT) {
+  } else if (buffer[4] == MSG_TYPE_MOVEMENT && angle_detection_enabled_local) {
+    LOGI("angle_detection_enabled: %d", angle_detection_enabled_local);
     handle_accel_event(buffer);
   }
 }
@@ -685,6 +716,9 @@ int main() {
 
   LOGI("Xiaomi keyboard service v%s starting at %s", VERSION_STRING, time_str);
 
+  // Load angle detection preference
+  load_angle_detection_preference();
+
   ssize_t bytes_read;
   char buffer[BUFFER_SIZE];
 
@@ -764,6 +798,11 @@ int main() {
   pthread_t sensor_thread;
   pthread_create(&sensor_thread, NULL, accelerometer_thread, NULL);
   pthread_detach(sensor_thread);
+
+  // Create the preference watching thread
+  pthread_t preference_thread;
+  pthread_create(&preference_thread, NULL, preference_watcher_thread, NULL);
+  pthread_detach(preference_thread);
 
   // Set up signal handling
   signal(SIGINT, signal_handler);
