@@ -38,21 +38,6 @@ class BatterySecretRcFixup(blob_fixup):
             f.write(content)
         return True
 
-class AudioPrimaryFixup(blob_fixup):
-    def run(self, ctx, file_path, obj_file_path):
-        """Replace string in audio primary library"""
-        if not obj_file_path:
-            return True
-        with open(obj_file_path, 'rb') as f:
-            content = f.read()
-        content = content.replace(
-            b"/vendor/lib/liba2dpoffload.so", 
-            b"liba2dpoffload_pipa.so\x00\x00\x00\x00\x00\x00\x00"
-        )
-        with open(obj_file_path, 'wb') as f:
-            f.write(content)
-        return True
-
 class CameraPostprocFixup(blob_fixup):
     def run(self, ctx, file_path, obj_file_path):
         """Run sigscan on camera postproc library"""

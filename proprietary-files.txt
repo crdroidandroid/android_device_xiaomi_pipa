@@ -49,9 +49,9 @@ vendor/lib/rfsa/adsp/misound_res_spk.bin
 vendor/lib/rfsa/adsp/misound_res_spk4ch.bin
 
 # Audio
-vendor/lib/hw/audio.primary.kona.so:vendor/lib/hw/audio.primary.pipa.so;FIX_SONAME
+vendor/lib/hw/audio.primary.kona.so
 vendor/lib/vndk/libxlog.so
-vendor/lib/liba2dpoffload.so:vendor/lib/liba2dpoffload_pipa.so;FIX_SONAME
+vendor/lib/liba2dpoffload.so
 vendor/lib/libaudio_log_utils.so
 vendor/lib/libaudiocloudctrl.so
 vendor/lib/libaudioroute_ext.so

@@ -31,9 +31,6 @@ vendor.audio.adm.buffering.ms=6
 vendor.audio.offload.buffer.size.kb=32
 vendor.audio_hal.period_multiplier=3
 
-# Audio hardware
-ro.hardware.audio.primary=pipa
-
 # Display
 debug.sf.set_idle_timer_ms=1100
 ro.vendor.display.paneltype=2
