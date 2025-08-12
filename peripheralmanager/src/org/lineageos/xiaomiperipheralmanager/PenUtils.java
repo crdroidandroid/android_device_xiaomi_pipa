@@ -43,14 +43,12 @@ public class PenUtils {
         Log.d(TAG, "enablePenMode: Enable Pen Mode");
         SystemProperties.set("persist.vendor.parts.pen", "18");
         Log.d(TAG, "enablePenMode: Setting Refresh Rates for Pen");
-        mRefreshUtils.setPenRefreshRate();
     }
 
     public static void disablePenMode() {
         Log.d(TAG, "disablePenMode: Disable Pen Mode");
         SystemProperties.set("persist.vendor.parts.pen", "2");
         Log.d(TAG, "disablePenMode: Resetting Refresh Rate Values");
-        mRefreshUtils.setDefaultRefreshRate();
     }
 
     private static void refreshPenMode() {

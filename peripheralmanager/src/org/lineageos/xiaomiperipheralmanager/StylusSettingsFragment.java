@@ -19,38 +19,40 @@ package org.lineageos.xiaomiperipheralmanager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.widget.Switch;
-import android.util.Log;
-
 import android.preference.PreferenceManager;
-import androidx.preference.ListPreference;
-import androidx.preference.Preference;
-import androidx.preference.Preference.OnPreferenceChangeListener;
 import androidx.preference.PreferenceFragment;
 import androidx.preference.SwitchPreference;
+import com.android.settingslib.widget.FooterPreference;
 import com.android.settingslib.widget.MainSwitchPreference;
-
-import org.lineageos.xiaomiperipheralmanager.PenUtils;
-import org.lineageos.xiaomiperipheralmanager.R;
 
 public class StylusSettingsFragment extends PreferenceFragment implements
         SharedPreferences.OnSharedPreferenceChangeListener {
-
     private static final String TAG = "XiaomiPeripheralManagerPenUtils";
-    private static final String STYLUS_KEY = "stylus_switch_key";
+    private static final String STYLUS_MODE_KEY = "stylus_mode_key";
+    private static final String FORCE_RECOGNIZE_STYLUS_KEY =
+      "force_recognize_stylus_key";
 
     private SharedPreferences mStylusPreference;
+    private RefreshUtils mRefreshUtils;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         addPreferencesFromResource(R.xml.stylus_settings);
 
-        mStylusPreference = PreferenceManager.getDefaultSharedPreferences(getContext());
-        SwitchPreference switchPreference = (SwitchPreference) findPreference(STYLUS_KEY);
+    Context context = getContext();
+    mStylusPreference = PreferenceManager.getDefaultSharedPreferences(context);
+    mRefreshUtils = new RefreshUtils(context);
 
-        switchPreference.setChecked(mStylusPreference.getBoolean(STYLUS_KEY, false));
-        switchPreference.setEnabled(true);
-    }
+    MainSwitchPreference stylusModePref =
+        (MainSwitchPreference)findPreference("stylus_mode_key");
+    stylusModePref.setChecked(
+        mStylusPreference.getBoolean("stylus_mode_key", false));
+
+    SwitchPreference forceRecognizePref =
+        (SwitchPreference)findPreference("force_recognize_stylus_key");
+    forceRecognizePref.setChecked(
+        mStylusPreference.getBoolean("force_recognize_stylus_key", false));
+  }
 
     @Override
     public void onResume() {
@@ -65,18 +67,26 @@ public class StylusSettingsFragment extends PreferenceFragment implements
     }
 
     @Override
-    public void onSharedPreferenceChanged(SharedPreferences sharedPreference, String key) {
-        if (STYLUS_KEY.equals(key)) {
-            forceStylus(mStylusPreference.getBoolean(key, false));
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences,
+                                          String key) {
+        if (STYLUS_MODE_KEY.equals(key)) {
+          setStylusMode(sharedPreferences.getBoolean(key, false));
+        } else if (FORCE_RECOGNIZE_STYLUS_KEY.equals(key)) {
+          setForceRecognizeStylus(sharedPreferences.getBoolean(key, false));
         }
     }
 
-    private void forceStylus(boolean status) {
-        mStylusPreference.edit().putBoolean(STYLUS_KEY, status).apply();
+    private void setStylusMode(boolean enabled) {
+      if (enabled)
+        mRefreshUtils.setPenRefreshRate();
+      else 
+        mRefreshUtils.setDefaultRefreshRate();
+    }
 
-        if (status)
-            PenUtils.enablePenMode();
-       else
-            PenUtils.disablePenMode();
+    private void setForceRecognizeStylus(boolean enabled) {
+      if (enabled)
+        PenUtils.enablePenMode();
+      else 
+        PenUtils.disablePenMode();
     }
 }
