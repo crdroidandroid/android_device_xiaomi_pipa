@@ -30,7 +30,3 @@ service xiaomi-keyboard /vendor/bin/xiaomi-keyboard
 
 on property:persist.vendor.parts.pen=*
     start xiaomi-pen
-
-on post-data-fs
-    exec - system system -- /system/bin/touch /data/misc/xiaomi_keyboard.conf
-    exec - system system -- /system/bin/restorecon /data/misc/xiaomi_keyboard.conf

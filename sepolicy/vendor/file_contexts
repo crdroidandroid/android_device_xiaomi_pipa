@@ -9,5 +9,3 @@
 
 # Xiaomi Keyboard
 /dev/nanodev0				u:object_r:xiaomi_keyboard_device:s0
-
-/data/vendor/xiaomi_keyboard.conf  u:object_r:xiaomi_keyboard_conf_file:s0

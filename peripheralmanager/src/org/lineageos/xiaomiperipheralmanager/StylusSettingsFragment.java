@@ -1,7 +1,17 @@
 /*
- * Copyright (C) 2023-2025 The LineageOS Project
+ * Copyright (C) 2023 The LineageOS Project
  *
- * SPDX-License-Identifier: Apache-2.0
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.lineageos.xiaomiperipheralmanager;
@@ -9,7 +19,7 @@ package org.lineageos.xiaomiperipheralmanager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.SystemProperties;
+import android.widget.Switch;
 import android.util.Log;
 
 import android.preference.PreferenceManager;
@@ -20,108 +30,53 @@ import androidx.preference.PreferenceFragment;
 import androidx.preference.SwitchPreference;
 import com.android.settingslib.widget.MainSwitchPreference;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
+import org.lineageos.xiaomiperipheralmanager.PenUtils;
+import org.lineageos.xiaomiperipheralmanager.R;
 
-/**
- * Settings fragment for stylus/pen configuration
- * Allows users to manually enable/disable the pen mode
- */
 public class StylusSettingsFragment extends PreferenceFragment implements
         SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private static final String TAG = "XiaomiPenSettings";
-    private static boolean DEBUG = SystemProperties.getBoolean("persist.xiaomi.pen.debug", false);
+    private static final String TAG = "XiaomiPeripheralManagerPenUtils";
     private static final String STYLUS_KEY = "stylus_switch_key";
 
     private SharedPreferences mStylusPreference;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        try {
-            addPreferencesFromResource(R.xml.stylus_settings);
+        addPreferencesFromResource(R.xml.stylus_settings);
 
-            mStylusPreference = PreferenceManager.getDefaultSharedPreferences(getContext());
-            SwitchPreference switchPreference = (SwitchPreference) findPreference(STYLUS_KEY);
+        mStylusPreference = PreferenceManager.getDefaultSharedPreferences(getContext());
+        SwitchPreference switchPreference = (SwitchPreference) findPreference(STYLUS_KEY);
 
-            if (switchPreference != null) {
-                switchPreference.setChecked(mStylusPreference.getBoolean(STYLUS_KEY, false));
-                switchPreference.setEnabled(true);
-            } else {
-                logError("Could not find stylus switch preference");
-            }
-            
-            logInfo("Stylus settings fragment created");
-        } catch (Exception e) {
-            logError("Error creating stylus settings: " + e.getMessage());
-        }
+        switchPreference.setChecked(mStylusPreference.getBoolean(STYLUS_KEY, false));
+        switchPreference.setEnabled(true);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        try {
-            mStylusPreference.registerOnSharedPreferenceChangeListener(this);
-            logDebug("Registered preference change listener");
-        } catch (Exception e) {
-            logError("Error in onResume: " + e.getMessage());
-        }
+        mStylusPreference.registerOnSharedPreferenceChangeListener(this);
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        try {
-            mStylusPreference.unregisterOnSharedPreferenceChangeListener(this);
-            logDebug("Unregistered preference change listener");
-        } catch (Exception e) {
-            logError("Error in onPause: " + e.getMessage());
-        }
+        mStylusPreference.unregisterOnSharedPreferenceChangeListener(this);
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreference, String key) {
         if (STYLUS_KEY.equals(key)) {
-            try {
-                boolean newStatus = mStylusPreference.getBoolean(key, false);
-                logInfo("Stylus preference changed to: " + newStatus);
-                forceStylus(newStatus);
-            } catch (Exception e) {
-                logError("Error handling preference change: " + e.getMessage());
-            }
+            forceStylus(mStylusPreference.getBoolean(key, false));
         }
     }
 
     private void forceStylus(boolean status) {
-        try {
-            mStylusPreference.edit().putBoolean(STYLUS_KEY, status).apply();
-            logInfo("Setting stylus mode: " + (status ? "enabled" : "disabled"));
-            
-            if (status) {
-                PenUtils.enablePenMode();
-            } else {
-                PenUtils.disablePenMode();
-            }
-        } catch (Exception e) {
-            logError("Error setting stylus mode: " + e.getMessage());
-        }
-    }
-    
-    // Enhanced logging helpers to match other classes
-    private void logDebug(String message) {
-        if (DEBUG) Log.d(TAG, getTimestamp() + message);
-    }
-    
-    private void logInfo(String message) {
-        Log.i(TAG, getTimestamp() + message);
-    }
-    
-    private void logError(String message) {
-        Log.e(TAG, getTimestamp() + message);
-    }
-    
-    private String getTimestamp() {
-        return "[" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()) + "] ";
+        mStylusPreference.edit().putBoolean(STYLUS_KEY, status).apply();
+
+        if (status)
+            PenUtils.enablePenMode();
+       else
+            PenUtils.disablePenMode();
     }
 }

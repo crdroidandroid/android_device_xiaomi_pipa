@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2023-2025 The LineageOS Project
+// Copyright (C) 2023 The LineageOS Project
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -46,10 +46,4 @@ cc_binary {
         "liblog",
         "libsensorndkbridge",
     ],
-
-    arch: {
-        arm: {
-            cflags: ["-mfpu=neon", "-mfloat-abi=softfp"],
-        },
-    },
 }
