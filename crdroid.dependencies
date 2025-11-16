@@ -1,0 +1,35 @@
+[
+  {
+    "repository": "crdroidandroid/android_device_xiaomi_pipa",
+    "target_path": "device/xiaomi/pipa"
+  },
+  {
+    "repository": "crdroidandroid/android_device_xiaomi_sm8250-common",
+    "target_path": "device/xiaomi/sm8250-common",
+    "branch": "16.0-pipa"
+  },
+  {
+    "repository": "crdroidandroid/android_vendor_xiaomi_pipa",
+    "target_path": "vendor/xiaomi/pipa"
+  },
+  {
+    "repository": "crdroidandroid/proprietary_vendor_xiaomi_sm8250-common",
+    "target_path": "vendor/xiaomi/sm8250-common",
+    "branch": "16.0-pipa"
+  },
+  {
+    "repository": "crdroidandroid/android_kernel_xiaomi_sm8250",
+    "target_path": "kernel/xiaomi/sm8250",
+    "branch": "16.0-pipa"
+  },
+  {
+    "repository": "PocoF3Releases/vendor_qcom_wfd",
+    "target_path": "vendor/qcom/wfd",
+    "branch": "bka"
+  },
+  {
+    "repository": "PocoF3Releases/device_qcom_wfd",
+    "target_path": "device/qcom/wfd",
+    "branch": "bka"
+  }
+]
