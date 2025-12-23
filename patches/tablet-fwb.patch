@@ -1,0 +1,31 @@
+diff --git a/packages/SystemUI/src/com/android/systemui/shade/QuickSettingsControllerImpl.java b/packages/SystemUI/src/com/android/systemui/shade/QuickSettingsControllerImpl.java
+index 4d68c8c5094f..1b12fbf3a54b 100644
+--- a/packages/SystemUI/src/com/android/systemui/shade/QuickSettingsControllerImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/shade/QuickSettingsControllerImpl.java
+@@ -734,7 +734,7 @@ public class QuickSettingsControllerImpl implements QuickSettingsController, Dum
+         if (getExpanded()) {
+             return onHeader || (yDiff < 0 && isTouchInQsArea(x, y));
+         } else {
+-            return onHeader;
++            return onHeader || (yDiff > mTouchSlop);
+         }
+     }
+ 
+diff --git a/services/core/java/com/android/server/wm/DisplayRotation.java b/services/core/java/com/android/server/wm/DisplayRotation.java
+index f7d88d2b5eed..6190e9610833 100644
+--- a/services/core/java/com/android/server/wm/DisplayRotation.java
++++ b/services/core/java/com/android/server/wm/DisplayRotation.java
+@@ -552,6 +552,13 @@ public class DisplayRotation {
+         final int lastOrientation = mLastOrientation;
+         @Surface.Rotation
+         int rotation = rotationForOrientation(lastOrientation, oldRotation);
++        //Preserve locked user rotation across screen off/on and keyguard
++        if (mUserRotationMode == WindowManagerPolicy.USER_ROTATION_LOCKED) {
++            rotation = mUserRotation;
++            ProtoLog.v(WM_DEBUG_ORIENTATION,
++                    "Forcing locked user rotation=%s (%d)",
++                    Surface.rotationToString(rotation), rotation);
++        }
+         // Use the saved rotation for tabletop mode, if set.
+         if (mFoldController != null && mFoldController.shouldRevertOverriddenRotation()) {
+             int prevRotation = rotation;
