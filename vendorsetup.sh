@@ -159,7 +159,7 @@ echo -e "${BOLD}>>> 1. CLONING ALL REPOSITORIES${NC}"
 clone_repo "$KERNEL_REPO" "$KERNEL_BRANCH" "kernel/xiaomi/sm8250"
 
 # Dependencies
-clone_repo "https://github.com/gensis01/android_device_xiaomi_sm8250-common" "16" "device/xiaomi/sm8250-common"
+clone_repo "https://github.com/gensis01/android_device_xiaomi_sm8250-common" "16-InfinityX" "device/xiaomi/sm8250-common"
 clone_repo "https://github.com/gensis01/vendor_xiaomi_sm8250-common" "16" "vendor/xiaomi/sm8250-common"
 clone_repo "https://github.com/gensis01/vendor_xiaomi_pipa" "16" "vendor/xiaomi/pipa"
 clone_repo "https://github.com/PocoF3Releases/vendor_qcom_wfd.git" "bka" "vendor/qcom/wfd"

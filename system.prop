@@ -3,3 +3,8 @@ gsm.version.baseband?=Wi-Fi Only
 
 # Xiaomi
 ro.product.mod_device=pipa_global
+
+# Device Defintions
+ro.product.marketname=Xiaomi Pad 6
+ro.infinity.soc=Snapdragon 870
+ro.infinity.camera=13MP + 8MP 
