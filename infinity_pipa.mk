@@ -36,4 +36,4 @@ TARGET_SUPPORTS_QUICK_TAP := false
 PRODUCT_GMS_CLIENTID_BASE := android-xiaomi
 
 PRODUCT_BUILD_PROP_OVERRIDES += \
-    BuildFingerprint=Xiaomi/pipa_pad_cn/pipa:14/UKQ1.240624.001/OS2.0.14.0.UMZCNXM:user/release-keys  \
+    BuildFingerprint=Xiaomi/pipa_pad_cn/pipa:14/UKQ1.240624.001/OS2.0.16.0.UMZCNXM:user/release-keys  \
