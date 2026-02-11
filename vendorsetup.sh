@@ -93,8 +93,8 @@ apply_patch() {
 
 setup_firmware() {
     local target_dir="vendor/xiaomi/pipa"
-    local fw_url="https://github.com/gensis01/vendor_xiaomi_pipa/releases/download/fw-radio-OS2.0.12.0.UMZCNXM-pipa/OS2.0.12.0.UMZCNXM-pipa.zip"
-    local tmp_zip="/tmp/OS2.0.12.0.UMZCNXM-pipa.zip"
+    local fw_url="https://github.com/MufasaXz/vendor_xiaomi_pipa/releases/download/OS2/OS2.0.19.0.UMZCNXM-pipa.zip"
+    local tmp_zip="/tmp/OS2.0.19.0.UMZCNXM-pipa.zip"
     local tmp_extract="/tmp/pipa_fw_extract"
 
     echo -e "${BOLD}──────────────────────────────────────────────────────────────${NC}"
@@ -162,9 +162,7 @@ clone_repo "$KERNEL_REPO" "$KERNEL_BRANCH" "kernel/xiaomi/sm8250"
 clone_repo "https://github.com/gensis01/android_device_xiaomi_sm8250-common" "16-InfinityX" "device/xiaomi/sm8250-common"
 clone_repo "https://github.com/gensis01/vendor_xiaomi_sm8250-common" "16" "vendor/xiaomi/sm8250-common"
 clone_repo "https://github.com/gensis01/vendor_xiaomi_pipa" "16" "vendor/xiaomi/pipa"
-clone_repo "https://github.com/PocoF3Releases/vendor_qcom_wfd.git" "bka" "vendor/qcom/wfd"
-clone_repo "https://github.com/PocoF3Releases/device_qcom_wfd.git" "bka" "device/qcom/wfd"
-clone_repo "https://github.com/gensis01/hardware_xiaomi.git" "aosp-16" "hardware/xiaomi" "fresh"
+clone_repo "https://github.com/gensis01/hardware_xiaomi.git" "16" "hardware/xiaomi" "fresh"
 clone_repo "https://github.com/PocoF3Releases/packages_resources_devicesettings.git" "aosp-16" "packages/resources/devicesettings" "fresh"
 
 echo -e "${GREEN}${BOLD}✔ All repositories cloned successfully.${NC}"
