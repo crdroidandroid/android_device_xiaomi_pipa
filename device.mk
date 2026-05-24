@@ -41,7 +41,6 @@ DEVICE_PACKAGE_OVERLAYS += \
 
 # Peripheral Manager
 PRODUCT_PACKAGES += \
-    XiaomiPeripheralManager
 
 # Permissions
 PRODUCT_COPY_FILES += \
