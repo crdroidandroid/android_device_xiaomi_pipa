@@ -30,6 +30,8 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     libpiex_shim
 
+
+
 # Display
 PRODUCT_VENDOR_PROPERTIES += \
     debug.graphics.game_default_frame_rate.disabled=1 \
@@ -41,6 +43,7 @@ DEVICE_PACKAGE_OVERLAYS += \
 
 # Peripheral Manager
 PRODUCT_PACKAGES += \
+    XiaomiPeripheralManager
 
 # Permissions
 PRODUCT_COPY_FILES += \
